@@ -36,9 +36,10 @@ transaction master so they show up online in CICS. The Control-M folder
 (see [`app/scheduler/CardDemo.controlm`](../app/scheduler/CardDemo.controlm)),
 so CICS files are closed for the duration of the run and reopened afterwards.
 The equivalent hand-driven stream in
-[`scripts/run_interest_calc.sh`](../scripts/run_interest_calc.sh) submits two
-extra members that the Control-M folder does not contain: `TRANBKP` (back up the
-transaction master) and `TRANIDX` (rebuild its alternate index).
+[`scripts/run_interest_calc.sh`](../scripts/run_interest_calc.sh) differs: it
+submits `CLOSEFIL → INTCALC → TRANBKP → COMBTRAN → TRANIDX → OPENFIL`, i.e. it
+adds `TRANBKP` (back up the transaction master) and `TRANIDX` (rebuild its
+alternate index), and has no `WAITSTEP`.
 
 ---
 
