@@ -108,7 +108,7 @@ flowchart TD
     RD1 --> RD2["1110-GET-XREF-DATA"]
     XREF --> RD2
     RD2 --> RATE
-    LOOP -->|same account| RATE["1200-GET-INTEREST-RATE<br/>key = ACCT-GROUP-ID + type + cat"]
+    LOOP -->|every record, break or not| RATE["1200-GET-INTEREST-RATE<br/>key = ACCT-GROUP-ID + type + cat"]
     DISC --> RATE
     RATE -->|status 23| DEF["1200-A-GET-DEFAULT-INT-RATE<br/>group id = 'DEFAULT'"]
     DISC -->|second read| DEF
