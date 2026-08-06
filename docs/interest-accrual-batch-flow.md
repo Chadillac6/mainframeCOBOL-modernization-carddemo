@@ -29,13 +29,16 @@ job falls back to a plan literally named `DEFAULT` rather than skipping the
 account.
 
 The interest transactions produced here are written to a new generation of the
-system-transaction file. Later jobs in the monthly stream (`TRANBKP`,
-`COMBTRAN`, `TRANIDX`) merge them into the transaction master so they show up
-online in CICS. The Control-M folder
-`MONTHLY-InterestCalculation` runs the sequence
+system-transaction file. Later jobs in the monthly stream merge them into the
+transaction master so they show up online in CICS. The Control-M folder
+`MONTHLY-InterestCalculation` runs
 `CLOSEFIL → INTCALC → COMBTRAN → WAITSTEP → OPENFIL`
 (see [`app/scheduler/CardDemo.controlm`](../app/scheduler/CardDemo.controlm)),
 so CICS files are closed for the duration of the run and reopened afterwards.
+The equivalent hand-driven stream in
+[`scripts/run_interest_calc.sh`](../scripts/run_interest_calc.sh) submits two
+extra members that the Control-M folder does not contain: `TRANBKP` (back up the
+transaction master) and `TRANIDX` (rebuild its alternate index).
 
 ---
 
@@ -52,7 +55,7 @@ of generated transaction IDs (see §5).
 | `XREFFIL1` | `AWS.M2.CARDDEMO.CARDXREF.VSAM.AIX.PATH` | not coded explicitly | VSAM alternate-index PATH | account id | — |
 | `ACCTFILE` | `AWS.M2.CARDDEMO.ACCTDATA.VSAM.KSDS` | `OPEN I-O`, random `READ` + `REWRITE` (**updated in place**) | VSAM KSDS, `ACCESS MODE IS RANDOM` | `FD-ACCT-ID PIC 9(11)` | 300 — copybook `CVACT01Y` |
 | `DISCGRP` | `AWS.M2.CARDDEMO.DISCGRP.VSAM.KSDS` | `OPEN INPUT`, random read | VSAM KSDS, `ACCESS MODE IS RANDOM` | `FD-DISCGRP-KEY` = `DIS-ACCT-GROUP-ID PIC X(10)` + `DIS-TRAN-TYPE-CD PIC X(02)` + `DIS-TRAN-CAT-CD PIC 9(04)` (16 bytes) | 50 — copybook `CVTRA02Y` |
-| `TRANSACT` | `AWS.M2.CARDDEMO.SYSTRAN(+1)` | `OPEN OUTPUT`, sequential `WRITE` | Non-VSAM QSAM GDG generation, `RECFM=F`, sequential — **no key** | 350 — copybook `CVTRA05Y` |
+| `TRANSACT` | `AWS.M2.CARDDEMO.SYSTRAN(+1)` | `OPEN OUTPUT`, sequential `WRITE` | Non-VSAM QSAM GDG generation, `RECFM=F`, sequential | **no key** | 350 — copybook `CVTRA05Y` |
 | `SYSOUT` / `SYSPRINT` | `SYSOUT=*` | `DISPLAY` output | — | — | — |
 
 Notes:
@@ -160,10 +163,10 @@ END-IF
 
 ```mermaid
 flowchart TD
-    subgraph SCHED["Control-M: MONTHLY-InterestCalculation"]
+    subgraph SCHED["Control-M folder: MONTHLY-InterestCalculation"]
         CLOSEFIL["CLOSEFIL<br/>close CICS files"] --> INTCALC["INTCALC<br/>PGM=CBACT04C<br/>PARM=yyyymmddhh"]
-        INTCALC --> TRANBKP["TRANBKP / COMBTRAN / TRANIDX<br/>merge into TRANSACT VSAM"]
-        TRANBKP --> OPENFIL["OPENFIL<br/>reopen CICS files"]
+        INTCALC --> COMBTRAN["COMBTRAN<br/>SORT + IDCAMS REPRO<br/>into TRANSACT VSAM KSDS"]
+        COMBTRAN --> WAITSTEP["WAITSTEP"] --> OPENFIL["OPENFIL<br/>reopen CICS files"]
     end
 
     TCATBAL[("TCATBALF<br/>KSDS · key acct+type+cat<br/>category balances")] -->|"sequential read<br/>1000-TCATBALF-GET-NEXT"| LOOP
@@ -183,14 +186,14 @@ flowchart TD
 
     CALC{"DIS-INT-RATE ≠ 0 ?"} -->|"no"| LOOP
     CALC -->|"yes"| INT["1300-COMPUTE-INTEREST<br/>WS-MONTHLY-INT = TRAN-CAT-BAL × DIS-INT-RATE / 1200<br/>ADD to WS-TOTAL-INT"]
-    INT --> FEES["1400-COMPUTE-FEES<br/>(stub — no logic)"]
+    CALC -->|"yes, after interest"| FEES["1400-COMPUTE-FEES<br/>(stub — no logic)"]
     INT --> TX["1300-B-WRITE-TX<br/>TRAN-ID = PARM-DATE + seq<br/>type 01 / cat 05 / source 'System'"]
     TX --> SYSTRAN[("TRANSACT<br/>SYSTRAN(+1)<br/>QSAM GDG · LRECL 350")]
     XREFR --> TX
 
     LOOP -->|"account break<br/>1050-UPDATE-ACCOUNT"| UPD["ACCT-CURR-BAL += WS-TOTAL-INT<br/>cycle credit/debit := 0<br/>REWRITE"]
     UPD --> ACCT
-    SYSTRAN --> TRANBKP
+    SYSTRAN --> COMBTRAN
 ```
 
 ---
