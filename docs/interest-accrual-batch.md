@@ -85,7 +85,9 @@ If the `DEFAULT` read also fails, the status is not `00`, so `1200-A` aborts the
 via `9999-ABEND-PROGRAM` (`CEE3ABD`, code 999).
 
 After the lookup, interest is computed only `IF DIS-INT-RATE NOT = 0`, so a
-zero-rate category produces no transaction and no balance change.
+zero-rate category produces no transaction and no balance change — but note that this
+holds only when the read actually populated `DIS-GROUP-RECORD`; because the record area
+is never cleared between records (§5 item 3), a stale non-zero rate can be reused.
 
 ## 4. Data flow
 
@@ -109,14 +111,15 @@ flowchart TD
     LOOP -->|same account| RATE["1200-GET-INTEREST-RATE<br/>key = ACCT-GROUP-ID + type + cat"]
     DISC --> RATE
     RATE -->|status 23| DEF["1200-A-GET-DEFAULT-INT-RATE<br/>group id = 'DEFAULT'"]
-    DEF --> DISC
+    DISC -->|second read| DEF
     DEF --> CHK
     RATE --> CHK{{"DIS-INT-RATE <> 0 ?"}}
     CHK -->|no| LOOP
     CHK -->|yes| CALC["1300-COMPUTE-INTEREST<br/>(TRAN-CAT-BAL * DIS-INT-RATE)/1200<br/>WS-TOTAL-INT += monthly int"]
     CALC --> TX["1300-B-WRITE-TX<br/>build TRAN-RECORD"]
     TX --> OUT[("TRANSACT<br/>SYSTRAN(+1) GDG<br/>PS, LRECL 350")]
-    CHK -->|yes| FEES["1400-COMPUTE-FEES<br/>(stub, no code)"]
+    TX --> FEES["1400-COMPUTE-FEES<br/>(stub, no code)"]
+    FEES --> LOOP
 ```
 
 ## 5. Unimplemented, dead, or defective logic
