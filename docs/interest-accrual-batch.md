@@ -159,6 +159,12 @@ flowchart TD
 9. **Dead/commented tracing**: `DISPLAY 'ACCT-GROUP-ID: '…`, `TRANCAT-CD`,
    `TRANCAT-TYPE-CD` and `DB2-TIMESTAMP` displays are commented out; `Z-GET-DB2-FORMAT-TIMESTAMP`
    builds a DB2 timestamp although the program has no DB2 access.
-10. **`TRANSACT` is opened `OUTPUT` unconditionally**, so a rerun always creates a new
+10. **No `ROUNDED` on the interest `COMPUTE`.** `WS-MONTHLY-INT` is `S9(09)V99`, so the
+    result is truncated toward zero on every category; the per-account total inherits
+    that systematic downward bias.
+11. **`TCATBALF` is never updated after accrual.** The category balances are read-only;
+    nothing zeroes or rolls `TRAN-CAT-BAL`, so re-running the job accrues interest again
+    on the same balances (the job is not idempotent — see also the restart note below).
+12. **`TRANSACT` is opened `OUTPUT` unconditionally**, so a rerun always creates a new
     GDG generation; there is no restart/checkpoint logic, and a mid-run abend leaves
     the account master partially updated with no compensating action.
