@@ -85,9 +85,9 @@ If the `DEFAULT` read also fails, the status is not `00`, so `1200-A` aborts the
 via `9999-ABEND-PROGRAM` (`CEE3ABD`, code 999).
 
 After the lookup, interest is computed only `IF DIS-INT-RATE NOT = 0`, so a
-zero-rate category produces no transaction and no balance change — but note that this
-holds only when the read actually populated `DIS-GROUP-RECORD`; because the record area
-is never cleared between records (§5 item 3), a stale non-zero rate can be reused.
+zero-rate category produces no transaction and no balance change. Note that
+`DIS-GROUP-RECORD` is never explicitly cleared between records; today this is
+harmless because every lookup path either refreshes the record or abends (§5 item 3).
 
 ## 4. Data flow
 
@@ -101,7 +101,7 @@ flowchart TD
     end
 
     TCB -->|sequential read<br/>1000-TCATBALF-GET-NEXT| LOOP{{"account break?<br/>TRANCAT-ACCT-ID changed"}}
-    LOOP -->|yes, not first| UPD["1050-UPDATE-ACCOUNT<br/>ACCT-CURR-BAL += WS-TOTAL-INT<br/>cycle credit/debit = 0"]
+    LOOP -->|yes, not first: fires on the first record of the<br/>next account, using the previous account's total| UPD["1050-UPDATE-ACCOUNT<br/>ACCT-CURR-BAL += WS-TOTAL-INT<br/>cycle credit/debit = 0"]
     UPD --> ACCT
     LOOP -->|new account| RD1["1100-GET-ACCT-DATA"]
     ACCT --> RD1
@@ -133,9 +133,11 @@ flowchart TD
    branch is unreachable. Interest transactions for the final account are still
    written to `TRANSACT`, but its `ACCT-CURR-BAL` is never rewritten — the account
    file and the transaction file disagree for that account.
-3. **`DIS-INT-RATE` is not reset between records.** If a `DISCGRP` read leaves the
-   record area untouched, the previously read rate stays in `DIS-GROUP-RECORD` and
-   is silently reused for the next category.
+3. **`DIS-GROUP-RECORD` is never initialized between records (latent risk only).**
+   No `INITIALIZE`/`MOVE SPACES` precedes the lookup, so correctness relies entirely on
+   the error handling: status `00` overwrites the area, status `23` re-reads under
+   `'DEFAULT'`, and anything else abends. Relaxing any of those abends (a plausible
+   modernization change) would immediately expose stale-rate reuse.
 4. **Non-zero `INVALID KEY` conditions are only displayed, then re-checked.**
    `1100-GET-ACCT-DATA` / `1110-GET-XREF-DATA` display `ACCOUNT NOT FOUND` and then
    abend on the same non-`00` status, so the friendly message is effectively just a
