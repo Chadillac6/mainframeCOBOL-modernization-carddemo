@@ -102,6 +102,11 @@ MOVE 0 TO ACCT-CURR-CYC-DEBIT
 REWRITE FD-ACCTFILE-REC FROM ACCOUNT-RECORD
 ```
 
+Ordering matters here: at an account break `1050-UPDATE-ACCOUNT` runs *before*
+`MOVE TRANCAT-ACCT-ID TO FD-ACCT-ID` and `1100-GET-ACCT-DATA`, so the `REWRITE`
+still targets the previous account, whose record is the one currently in
+`ACCOUNT-RECORD`.
+
 ### Where the rate comes from
 
 The rate is read from the disclosure-group KSDS in `1200-GET-INTEREST-RATE`,
