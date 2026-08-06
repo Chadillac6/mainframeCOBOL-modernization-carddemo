@@ -139,8 +139,11 @@ END-IF
    is replaced with the literal `'DEFAULT'` (the transaction type and category
    parts of the key are left as-is) and the read is retried in
    `1200-A-GET-DEFAULT-INT-RATE`.
-3. `app/data/ASCII/discgrp.txt` ships `DEFAULT` rows for every type/category
-   combination, so in the shipped data the fallback always resolves.
+3. `app/data/ASCII/discgrp.txt` ships a `DEFAULT` row for every type/category
+   combination *that appears in that file*, and the only combination present in
+   `app/data/ASCII/tcatbal.txt` is `01/0001`, so the fallback always resolves
+   with the shipped data. A category-balance row carrying a type/category pair
+   absent from the rate file would still hit the abend path in step 4.
 4. If the retry does **not** find a `DEFAULT` row, `1200-A-GET-DEFAULT-INT-RATE`
    has no `INVALID KEY` clause and status `23` fails the `= '00'` test →
    `APPL-RESULT 12` → `9999-ABEND-PROGRAM` (`CEE3ABD`, abend code 999). A
@@ -235,7 +238,9 @@ flowchart TD
    date + a 6-digit counter = the 16-byte `TRAN-ID`). Nothing validates the
    parameter's length or contents, and the shipped JCL hardcodes
    `PARM='2022071800'`, so reruns without editing the JCL regenerate the same
-   transaction IDs.
+   transaction IDs. `WS-TRANID-SUFFIX PIC 9(06)` is likewise never reset and
+   wraps silently after 999,999 interest transactions in a single run — the other
+   way duplicate `TRAN-ID`s can arise.
 
 5. **No rerun / restart protection.** Category balances in `TCATBALF` are never
    reset or flagged, and the account `REWRITE` is not coordinated with the
